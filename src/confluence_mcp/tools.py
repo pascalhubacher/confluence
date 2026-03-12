@@ -1171,3 +1171,489 @@ def convert_ids_to_types(content_ids: list[str]) -> Any:
         v2("/content/convert-ids-to-types"),
         json={"contentIds": content_ids},
     )
+
+
+# ===========================================================================
+# Spaces — extended (create + properties CRUD + operations + content labels)
+# ===========================================================================
+
+
+@mcp.tool(title="Create Space", annotations=_CREATE)
+def create_space(
+    key: str,
+    name: str,
+    description: Optional[str] = None,
+) -> Any:
+    """Create a new Confluence space.
+
+    Args:
+        key: Unique space key (e.g. 'ENG'). Must be uppercase letters/numbers.
+        name: Human-readable space name.
+        description: Optional plain-text description of the space.
+    """
+    require_str(key, "key")
+    require_str(name, "name")
+    payload: dict[str, Any] = {"key": key, "name": name}
+    if description:
+        payload["description"] = {
+            "representation": "plain",
+            "value": description,
+        }
+    return request("POST", v2("/spaces"), json=payload)
+
+
+@mcp.tool(title="Get Space Operations", annotations=_READ_ONLY)
+def get_space_operations(space_id: str) -> Any:
+    """Get the operations (permissions) available to the current user in a space.
+
+    Args:
+        space_id: The ID of the space.
+    """
+    require_str(space_id, "space_id")
+    return request("GET", v2(f"/spaces/{space_id}/operations"))
+
+
+@mcp.tool(title="Get Space Content Labels", annotations=_READ_ONLY)
+def get_space_content_labels(
+    space_id: str,
+    prefix: Optional[str] = None,
+    cursor: Optional[str] = None,
+    limit: Optional[int] = None,
+) -> Any:
+    """List all labels used on content within a space.
+
+    Args:
+        space_id: The ID of the space.
+        prefix: Filter by label prefix (e.g. 'global', 'my', 'team').
+        cursor: Pagination cursor from a previous response.
+        limit: Max results to return (default 25, max 250).
+    """
+    require_str(space_id, "space_id")
+    return request(
+        "GET",
+        v2(f"/spaces/{space_id}/content/labels"),
+        params=clean({"prefix": prefix, "cursor": cursor, "limit": limit}),
+    )
+
+
+@mcp.tool(title="List Space Properties", annotations=_READ_ONLY)
+def list_space_properties(
+    space_id: str,
+    key: Optional[str] = None,
+    cursor: Optional[str] = None,
+    limit: Optional[int] = None,
+) -> Any:
+    """List content properties of a space.
+
+    Args:
+        space_id: The ID of the space.
+        key: Filter by property key.
+        cursor: Pagination cursor from a previous response.
+        limit: Max results to return.
+    """
+    require_str(space_id, "space_id")
+    return request(
+        "GET",
+        v2(f"/spaces/{space_id}/properties"),
+        params=clean({"key": key, "cursor": cursor, "limit": limit}),
+    )
+
+
+@mcp.tool(title="Get Space Property", annotations=_READ_ONLY)
+def get_space_property(space_id: str, property_id: str) -> Any:
+    """Get a single content property of a space by its ID.
+
+    Args:
+        space_id: The ID of the space.
+        property_id: The ID of the property.
+    """
+    require_str(space_id, "space_id")
+    require_str(property_id, "property_id")
+    return request("GET", v2(f"/spaces/{space_id}/properties/{property_id}"))
+
+
+@mcp.tool(title="Create Space Property", annotations=_CREATE)
+def create_space_property(space_id: str, key: str, value: Any) -> Any:
+    """Create a new content property on a space.
+
+    Args:
+        space_id: The ID of the space.
+        key: Property key (must be unique within the space).
+        value: Property value (string, number, dict, or list).
+    """
+    require_str(space_id, "space_id")
+    require_str(key, "key")
+    return request(
+        "POST",
+        v2(f"/spaces/{space_id}/properties"),
+        json={"key": key, "value": value},
+    )
+
+
+@mcp.tool(title="Update Space Property", annotations=_UPDATE)
+def update_space_property(
+    space_id: str,
+    property_id: str,
+    key: str,
+    value: Any,
+    version_number: int,
+) -> Any:
+    """Update an existing content property on a space.
+
+    Args:
+        space_id: The ID of the space.
+        property_id: The ID of the property to update.
+        key: Property key.
+        value: New property value.
+        version_number: Current version number of the property (incremented automatically).
+    """
+    require_str(space_id, "space_id")
+    require_str(property_id, "property_id")
+    require_str(key, "key")
+    if version_number < 1:
+        raise ValueError("'version_number' must be >= 1.")
+    return request(
+        "PUT",
+        v2(f"/spaces/{space_id}/properties/{property_id}"),
+        json={"key": key, "value": value, "version": {"number": version_number}},
+    )
+
+
+@mcp.tool(title="Delete Space Property", annotations=_DESTROY)
+def delete_space_property(space_id: str, property_id: str) -> Any:
+    """Delete a content property from a space.
+
+    Args:
+        space_id: The ID of the space.
+        property_id: The ID of the property to delete.
+    """
+    require_str(space_id, "space_id")
+    require_str(property_id, "property_id")
+    return request("DELETE", v2(f"/spaces/{space_id}/properties/{property_id}"))
+
+
+# ===========================================================================
+# Pages — extended (bulk get + update title)
+# ===========================================================================
+
+
+@mcp.tool(title="Bulk Get Pages", annotations=_READ_ONLY)
+def bulk_get_pages(
+    page_ids: list[str],
+    body_format: Optional[str] = None,
+) -> Any:
+    """Fetch multiple pages by their IDs in a single request.
+
+    Returns a results list with one entry per resolved page ID.
+
+    Args:
+        page_ids: List of page IDs to retrieve (up to 250).
+        body_format: Body representation — 'storage', 'atlas_doc_format', or 'view'.
+    """
+    if not page_ids:
+        raise ValueError("'page_ids' must be a non-empty list.")
+    check_enum(body_format, "body_format", {"storage", "atlas_doc_format", "view"})
+    return request(
+        "GET",
+        v2("/pages"),
+        params=clean({"id": ",".join(page_ids), "body-format": body_format}),
+    )
+
+
+@mcp.tool(title="Update Page Title", annotations=_UPDATE)
+def update_page_title(page_id: str, title: str) -> Any:
+    """Rename a page without changing its body or version metadata.
+
+    Args:
+        page_id: The ID of the page to rename.
+        title: The new title for the page.
+    """
+    require_str(page_id, "page_id")
+    require_str(title, "title")
+    return request(
+        "PUT",
+        v2(f"/pages/{page_id}/title"),
+        json={"title": title},
+    )
+
+
+# ===========================================================================
+# Labels — global (list all labels; list blogposts by label)
+# ===========================================================================
+
+
+@mcp.tool(title="List Labels", annotations=_READ_ONLY)
+def list_labels(
+    label_prefix: Optional[str] = None,
+    body_format: Optional[str] = None,
+    cursor: Optional[str] = None,
+    limit: Optional[int] = None,
+) -> Any:
+    """List labels across the entire Confluence instance.
+
+    Args:
+        label_prefix: Filter by prefix — 'global', 'my', or 'team'.
+        body_format: Body representation for associated content.
+        cursor: Pagination cursor from a previous response.
+        limit: Max results to return (default 25, max 250).
+    """
+    check_enum(label_prefix, "label_prefix", {"global", "my", "team"})
+    return request(
+        "GET",
+        v2("/labels"),
+        params=clean(
+            {
+                "prefix": label_prefix,
+                "body-format": body_format,
+                "cursor": cursor,
+                "limit": limit,
+            }
+        ),
+    )
+
+
+@mcp.tool(title="List Blogposts With Label", annotations=_READ_ONLY)
+def list_blogposts_with_label(
+    label_id: str,
+    space_id: Optional[str] = None,
+    body_format: Optional[str] = None,
+    sort: Optional[str] = None,
+    cursor: Optional[str] = None,
+    limit: Optional[int] = None,
+) -> Any:
+    """List blog posts that carry a specific label.
+
+    Args:
+        label_id: The ID of the label.
+        space_id: Restrict results to this space ID.
+        body_format: Body representation — 'storage', 'atlas_doc_format', or 'view'.
+        sort: Sort order (e.g. 'created-date', '-created-date', 'title').
+        cursor: Pagination cursor from a previous response.
+        limit: Max results to return (default 25, max 250).
+    """
+    require_str(label_id, "label_id")
+    return request(
+        "GET",
+        v2(f"/labels/{label_id}/blogposts"),
+        params=clean(
+            {
+                "space-id": space_id,
+                "body-format": body_format,
+                "sort": sort,
+                "cursor": cursor,
+                "limit": limit,
+            }
+        ),
+    )
+
+
+# ===========================================================================
+# Inline Comments — create
+# ===========================================================================
+
+
+@mcp.tool(title="Create Inline Comment", annotations=_CREATE)
+def create_inline_comment(
+    page_id: str,
+    body_value: str,
+    inline_marker_ref: str,
+    body_representation: str = "storage",
+    resolved: bool = False,
+) -> Any:
+    """Create an inline comment anchored to a text selection on a page.
+
+    Args:
+        page_id: The ID of the page to comment on.
+        body_value: HTML/storage-format body of the comment.
+        inline_marker_ref: The marker reference identifying the text selection
+            (obtained from the page's inline marker data).
+        body_representation: Body format — 'storage', 'wiki', or 'atlas_doc_format'.
+        resolved: Whether to create the comment in a resolved state.
+    """
+    require_str(page_id, "page_id")
+    require_str(body_value, "body_value")
+    require_str(inline_marker_ref, "inline_marker_ref")
+    check_enum(body_representation, "body_representation", _VALID_BODY_REPRESENTATIONS)
+    return request(
+        "POST",
+        v2("/inline-comments"),
+        json={
+            "pageId": page_id,
+            "body": {"representation": body_representation, "value": body_value},
+            "inlineMarkerRef": inline_marker_ref,
+            "resolved": resolved,
+        },
+    )
+
+
+# ===========================================================================
+# Blogposts — full CRUD
+# ===========================================================================
+
+
+@mcp.tool(title="List Blogposts", annotations=_READ_ONLY)
+def list_blogposts(
+    space_id: Optional[str] = None,
+    status: Optional[str] = None,
+    sort: Optional[str] = None,
+    cursor: Optional[str] = None,
+    limit: Optional[int] = None,
+) -> Any:
+    """List blog posts, optionally filtered by space.
+
+    Args:
+        space_id: Restrict to this space ID.
+        status: Filter by status — 'current' or 'draft'.
+        sort: Sort order (e.g. 'created-date', '-created-date', 'title').
+        cursor: Pagination cursor from a previous response.
+        limit: Max results to return (default 25, max 250).
+    """
+    check_enum(status, "status", {"current", "draft"})
+    return request(
+        "GET",
+        v2("/blogposts"),
+        params=clean(
+            {
+                "space-id": space_id,
+                "status": status,
+                "sort": sort,
+                "cursor": cursor,
+                "limit": limit,
+            }
+        ),
+    )
+
+
+@mcp.tool(title="Get Blogpost", annotations=_READ_ONLY)
+def get_blogpost(
+    blogpost_id: str,
+    body_format: Optional[str] = None,
+    version: Optional[int] = None,
+) -> Any:
+    """Get a blog post by ID.
+
+    Args:
+        blogpost_id: The ID of the blog post.
+        body_format: Body representation — 'storage', 'atlas_doc_format', or 'view'.
+        version: Retrieve a specific historical version number.
+    """
+    require_str(blogpost_id, "blogpost_id")
+    check_enum(body_format, "body_format", {"storage", "atlas_doc_format", "view"})
+    return request(
+        "GET",
+        v2(f"/blogposts/{blogpost_id}"),
+        params=clean({"body-format": body_format, "version": version}),
+    )
+
+
+@mcp.tool(title="Create Blogpost", annotations=_CREATE)
+def create_blogpost(
+    space_id: str,
+    title: str,
+    body_value: str,
+    body_representation: str = "storage",
+    status: str = "current",
+) -> Any:
+    """Create a new blog post in a space.
+
+    Args:
+        space_id: The ID of the space to publish in.
+        title: Title of the blog post.
+        body_value: HTML/storage body content.
+        body_representation: Body format — 'storage', 'wiki', or 'atlas_doc_format'.
+        status: 'current' to publish immediately, or 'draft' to save as draft.
+    """
+    require_str(space_id, "space_id")
+    require_str(title, "title")
+    check_enum(body_representation, "body_representation", _VALID_BODY_REPRESENTATIONS)
+    check_enum(status, "status", {"current", "draft"})
+    return request(
+        "POST",
+        v2("/blogposts"),
+        json={
+            "spaceId": space_id,
+            "title": title,
+            "body": {"representation": body_representation, "value": body_value},
+            "status": status,
+        },
+    )
+
+
+@mcp.tool(title="Update Blogpost", annotations=_UPDATE)
+def update_blogpost(
+    blogpost_id: str,
+    title: str,
+    body_value: str,
+    version_number: int,
+    body_representation: str = "storage",
+    status: str = "current",
+) -> Any:
+    """Update an existing blog post.
+
+    Args:
+        blogpost_id: The ID of the blog post to update.
+        title: New title.
+        body_value: New body content.
+        version_number: The *new* version number (current version + 1).
+        body_representation: Body format — 'storage', 'wiki', or 'atlas_doc_format'.
+        status: 'current' or 'draft'.
+    """
+    require_str(blogpost_id, "blogpost_id")
+    require_str(title, "title")
+    if version_number < 1:
+        raise ValueError("'version_number' must be >= 1.")
+    check_enum(body_representation, "body_representation", _VALID_BODY_REPRESENTATIONS)
+    check_enum(status, "status", {"current", "draft"})
+    return request(
+        "PUT",
+        v2(f"/blogposts/{blogpost_id}"),
+        json={
+            "id": blogpost_id,
+            "title": title,
+            "body": {"representation": body_representation, "value": body_value},
+            "version": {"number": version_number},
+            "status": status,
+        },
+    )
+
+
+@mcp.tool(title="Delete Blogpost", annotations=_DESTROY)
+def delete_blogpost(blogpost_id: str, purge: bool = False) -> Any:
+    """Delete a blog post (moves to trash, or permanently purges).
+
+    Args:
+        blogpost_id: The ID of the blog post to delete.
+        purge: If True, permanently delete instead of moving to trash.
+    """
+    require_str(blogpost_id, "blogpost_id")
+    return request(
+        "DELETE",
+        v2(f"/blogposts/{blogpost_id}"),
+        params={"purge": "true"} if purge else None,
+    )
+
+
+# ===========================================================================
+# Bulk user lookup
+# ===========================================================================
+
+
+@mcp.tool(title="Bulk User Lookup", annotations=_READ_ONLY)
+def bulk_user_lookup(
+    account_ids: list[str],
+) -> Any:
+    """Resolve multiple Atlassian account IDs to user profiles in a single call.
+
+    Useful when you have a list of assignee/author IDs from tasks or comments
+    and want to retrieve display names and emails in bulk.
+
+    Args:
+        account_ids: List of Atlassian account IDs to look up (up to 200).
+    """
+    if not account_ids:
+        raise ValueError("'account_ids' must be a non-empty list.")
+    return request(
+        "POST",
+        v2("/users-bulk"),
+        json={"accountIds": account_ids},
+    )

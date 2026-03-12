@@ -1329,3 +1329,585 @@ class TestBasicAuthHeader:
             json=OK_JSON,
         )
         assert tools.list_pages() == OK_JSON
+
+
+# ---------------------------------------------------------------------------
+# Spaces — extended (create + properties CRUD + operations + content labels)
+# ---------------------------------------------------------------------------
+
+
+class TestCreateSpace:
+    def test_minimal(
+        self, monkeypatch: pytest.MonkeyPatch, httpx_mock: HTTPXMock
+    ) -> None:
+        _patch_globals(monkeypatch, bearer_token="bt")
+        httpx_mock.add_response(
+            url=f"{V2}/spaces",
+            method="POST",
+            match_json={"key": "ENG", "name": "Engineering"},
+            json=OK_JSON,
+        )
+        assert tools.create_space("ENG", "Engineering") == OK_JSON
+
+    def test_with_description(
+        self, monkeypatch: pytest.MonkeyPatch, httpx_mock: HTTPXMock
+    ) -> None:
+        _patch_globals(monkeypatch, bearer_token="bt")
+        httpx_mock.add_response(
+            url=f"{V2}/spaces",
+            method="POST",
+            match_json={
+                "key": "DOCS",
+                "name": "Documentation",
+                "description": {"representation": "plain", "value": "All docs here"},
+            },
+            json=OK_JSON,
+        )
+        assert (
+            tools.create_space("DOCS", "Documentation", description="All docs here")
+            == OK_JSON
+        )
+
+    def test_empty_key_raises(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        _patch_globals(monkeypatch, bearer_token="bt")
+        with pytest.raises(ValueError, match="'key'"):
+            tools.create_space("", "Engineering")
+
+    def test_empty_name_raises(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        _patch_globals(monkeypatch, bearer_token="bt")
+        with pytest.raises(ValueError, match="'name'"):
+            tools.create_space("ENG", "")
+
+
+class TestGetSpaceOperations:
+    def test_basic(
+        self, monkeypatch: pytest.MonkeyPatch, httpx_mock: HTTPXMock
+    ) -> None:
+        _patch_globals(monkeypatch, bearer_token="bt")
+        httpx_mock.add_response(url=f"{V2}/spaces/S1/operations", json=OK_JSON)
+        assert tools.get_space_operations("S1") == OK_JSON
+
+    def test_empty_id_raises(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        _patch_globals(monkeypatch, bearer_token="bt")
+        with pytest.raises(ValueError, match="'space_id'"):
+            tools.get_space_operations("")
+
+
+class TestGetSpaceContentLabels:
+    def test_minimal(
+        self, monkeypatch: pytest.MonkeyPatch, httpx_mock: HTTPXMock
+    ) -> None:
+        _patch_globals(monkeypatch, bearer_token="bt")
+        httpx_mock.add_response(url=f"{V2}/spaces/S1/content/labels", json=OK_JSON)
+        assert tools.get_space_content_labels("S1") == OK_JSON
+
+    def test_with_params(
+        self, monkeypatch: pytest.MonkeyPatch, httpx_mock: HTTPXMock
+    ) -> None:
+        _patch_globals(monkeypatch, bearer_token="bt")
+        httpx_mock.add_response(
+            url=f"{V2}/spaces/S1/content/labels",
+            match_params={"prefix": "global", "cursor": "c", "limit": "10"},
+            json=OK_JSON,
+        )
+        assert (
+            tools.get_space_content_labels("S1", prefix="global", cursor="c", limit=10)
+            == OK_JSON
+        )
+
+
+class TestListSpaceProperties:
+    def test_minimal(
+        self, monkeypatch: pytest.MonkeyPatch, httpx_mock: HTTPXMock
+    ) -> None:
+        _patch_globals(monkeypatch, bearer_token="bt")
+        httpx_mock.add_response(url=f"{V2}/spaces/S1/properties", json=OK_JSON)
+        assert tools.list_space_properties("S1") == OK_JSON
+
+    def test_with_key_filter(
+        self, monkeypatch: pytest.MonkeyPatch, httpx_mock: HTTPXMock
+    ) -> None:
+        _patch_globals(monkeypatch, bearer_token="bt")
+        httpx_mock.add_response(
+            url=f"{V2}/spaces/S1/properties",
+            match_params={"key": "my-prop", "cursor": "c", "limit": "5"},
+            json=OK_JSON,
+        )
+        assert (
+            tools.list_space_properties("S1", key="my-prop", cursor="c", limit=5)
+            == OK_JSON
+        )
+
+
+class TestGetSpaceProperty:
+    def test_basic(
+        self, monkeypatch: pytest.MonkeyPatch, httpx_mock: HTTPXMock
+    ) -> None:
+        _patch_globals(monkeypatch, bearer_token="bt")
+        httpx_mock.add_response(url=f"{V2}/spaces/S1/properties/P1", json=OK_JSON)
+        assert tools.get_space_property("S1", "P1") == OK_JSON
+
+
+class TestCreateSpaceProperty:
+    def test_basic(
+        self, monkeypatch: pytest.MonkeyPatch, httpx_mock: HTTPXMock
+    ) -> None:
+        _patch_globals(monkeypatch, bearer_token="bt")
+        httpx_mock.add_response(
+            url=f"{V2}/spaces/S1/properties",
+            method="POST",
+            match_json={"key": "theme", "value": "dark"},
+            json=OK_JSON,
+        )
+        assert tools.create_space_property("S1", "theme", "dark") == OK_JSON
+
+    def test_with_dict_value(
+        self, monkeypatch: pytest.MonkeyPatch, httpx_mock: HTTPXMock
+    ) -> None:
+        _patch_globals(monkeypatch, bearer_token="bt")
+        httpx_mock.add_response(
+            url=f"{V2}/spaces/S1/properties",
+            method="POST",
+            match_json={"key": "meta", "value": {"score": 9}},
+            json=OK_JSON,
+        )
+        assert tools.create_space_property("S1", "meta", {"score": 9}) == OK_JSON
+
+
+class TestUpdateSpaceProperty:
+    def test_basic(
+        self, monkeypatch: pytest.MonkeyPatch, httpx_mock: HTTPXMock
+    ) -> None:
+        _patch_globals(monkeypatch, bearer_token="bt")
+        httpx_mock.add_response(
+            url=f"{V2}/spaces/S1/properties/P1",
+            method="PUT",
+            match_json={
+                "key": "theme",
+                "value": "light",
+                "version": {"number": 2},
+            },
+            json=OK_JSON,
+        )
+        assert tools.update_space_property("S1", "P1", "theme", "light", 2) == OK_JSON
+
+    def test_zero_version_raises(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        _patch_globals(monkeypatch, bearer_token="bt")
+        with pytest.raises(ValueError, match="'version_number'"):
+            tools.update_space_property("S1", "P1", "theme", "light", 0)
+
+
+class TestDeleteSpaceProperty:
+    def test_basic(
+        self, monkeypatch: pytest.MonkeyPatch, httpx_mock: HTTPXMock
+    ) -> None:
+        _patch_globals(monkeypatch, bearer_token="bt")
+        httpx_mock.add_response(
+            url=f"{V2}/spaces/S1/properties/P1",
+            method="DELETE",
+            status_code=204,
+            content=b"",
+        )
+        result = tools.delete_space_property("S1", "P1")
+        assert result["status"] == 204
+
+
+# ---------------------------------------------------------------------------
+# Pages — extended (bulk get + update title)
+# ---------------------------------------------------------------------------
+
+
+class TestBulkGetPages:
+    def test_basic(
+        self, monkeypatch: pytest.MonkeyPatch, httpx_mock: HTTPXMock
+    ) -> None:
+        _patch_globals(monkeypatch, bearer_token="bt")
+        httpx_mock.add_response(
+            url=f"{V2}/pages",
+            match_params={"id": "1,2,3"},
+            json=OK_JSON,
+        )
+        assert tools.bulk_get_pages(["1", "2", "3"]) == OK_JSON
+
+    def test_with_body_format(
+        self, monkeypatch: pytest.MonkeyPatch, httpx_mock: HTTPXMock
+    ) -> None:
+        _patch_globals(monkeypatch, bearer_token="bt")
+        httpx_mock.add_response(
+            url=f"{V2}/pages",
+            match_params={"id": "10,20", "body-format": "storage"},
+            json=OK_JSON,
+        )
+        assert tools.bulk_get_pages(["10", "20"], body_format="storage") == OK_JSON
+
+    def test_empty_list_raises(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        _patch_globals(monkeypatch, bearer_token="bt")
+        with pytest.raises(ValueError, match="'page_ids'"):
+            tools.bulk_get_pages([])
+
+
+class TestUpdatePageTitle:
+    def test_basic(
+        self, monkeypatch: pytest.MonkeyPatch, httpx_mock: HTTPXMock
+    ) -> None:
+        _patch_globals(monkeypatch, bearer_token="bt")
+        httpx_mock.add_response(
+            url=f"{V2}/pages/1/title",
+            method="PUT",
+            match_json={"title": "New Title"},
+            json=OK_JSON,
+        )
+        assert tools.update_page_title("1", "New Title") == OK_JSON
+
+    def test_empty_page_id_raises(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        _patch_globals(monkeypatch, bearer_token="bt")
+        with pytest.raises(ValueError, match="'page_id'"):
+            tools.update_page_title("", "New Title")
+
+    def test_empty_title_raises(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        _patch_globals(monkeypatch, bearer_token="bt")
+        with pytest.raises(ValueError, match="'title'"):
+            tools.update_page_title("1", "")
+
+
+# ---------------------------------------------------------------------------
+# Labels — global
+# ---------------------------------------------------------------------------
+
+
+class TestListLabels:
+    def test_no_filters(
+        self, monkeypatch: pytest.MonkeyPatch, httpx_mock: HTTPXMock
+    ) -> None:
+        _patch_globals(monkeypatch, bearer_token="bt")
+        httpx_mock.add_response(url=f"{V2}/labels", json=OK_JSON)
+        assert tools.list_labels() == OK_JSON
+
+    def test_with_all_params(
+        self, monkeypatch: pytest.MonkeyPatch, httpx_mock: HTTPXMock
+    ) -> None:
+        _patch_globals(monkeypatch, bearer_token="bt")
+        httpx_mock.add_response(
+            url=f"{V2}/labels",
+            match_params={
+                "prefix": "global",
+                "body-format": "storage",
+                "cursor": "c",
+                "limit": "25",
+            },
+            json=OK_JSON,
+        )
+        assert (
+            tools.list_labels(
+                label_prefix="global",
+                body_format="storage",
+                cursor="c",
+                limit=25,
+            )
+            == OK_JSON
+        )
+
+    def test_invalid_prefix_raises(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        _patch_globals(monkeypatch, bearer_token="bt")
+        with pytest.raises(ValueError, match="'label_prefix'"):
+            tools.list_labels(label_prefix="bad")
+
+
+class TestListBlogpostsWithLabel:
+    def test_minimal(
+        self, monkeypatch: pytest.MonkeyPatch, httpx_mock: HTTPXMock
+    ) -> None:
+        _patch_globals(monkeypatch, bearer_token="bt")
+        httpx_mock.add_response(url=f"{V2}/labels/L1/blogposts", json=OK_JSON)
+        assert tools.list_blogposts_with_label("L1") == OK_JSON
+
+    def test_with_all_params(
+        self, monkeypatch: pytest.MonkeyPatch, httpx_mock: HTTPXMock
+    ) -> None:
+        _patch_globals(monkeypatch, bearer_token="bt")
+        httpx_mock.add_response(
+            url=f"{V2}/labels/L1/blogposts",
+            match_params={
+                "space-id": "S1",
+                "body-format": "storage",
+                "sort": "title",
+                "cursor": "c",
+                "limit": "10",
+            },
+            json=OK_JSON,
+        )
+        result = tools.list_blogposts_with_label(
+            "L1",
+            space_id="S1",
+            body_format="storage",
+            sort="title",
+            cursor="c",
+            limit=10,
+        )
+        assert result == OK_JSON
+
+    def test_empty_label_id_raises(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        _patch_globals(monkeypatch, bearer_token="bt")
+        with pytest.raises(ValueError, match="'label_id'"):
+            tools.list_blogposts_with_label("")
+
+
+# ---------------------------------------------------------------------------
+# Inline Comments — create
+# ---------------------------------------------------------------------------
+
+
+class TestCreateInlineComment:
+    def test_basic(
+        self, monkeypatch: pytest.MonkeyPatch, httpx_mock: HTTPXMock
+    ) -> None:
+        _patch_globals(monkeypatch, bearer_token="bt")
+        httpx_mock.add_response(
+            url=f"{V2}/inline-comments",
+            method="POST",
+            match_json={
+                "pageId": "42",
+                "body": {"representation": "storage", "value": "Note this"},
+                "inlineMarkerRef": "marker-abc",
+                "resolved": False,
+            },
+            json=OK_JSON,
+        )
+        assert tools.create_inline_comment("42", "Note this", "marker-abc") == OK_JSON
+
+    def test_resolved_true(
+        self, monkeypatch: pytest.MonkeyPatch, httpx_mock: HTTPXMock
+    ) -> None:
+        _patch_globals(monkeypatch, bearer_token="bt")
+        httpx_mock.add_response(
+            url=f"{V2}/inline-comments",
+            method="POST",
+            match_json={
+                "pageId": "1",
+                "body": {"representation": "wiki", "value": "Done"},
+                "inlineMarkerRef": "m1",
+                "resolved": True,
+            },
+            json=OK_JSON,
+        )
+        assert (
+            tools.create_inline_comment(
+                "1", "Done", "m1", body_representation="wiki", resolved=True
+            )
+            == OK_JSON
+        )
+
+    def test_empty_page_id_raises(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        _patch_globals(monkeypatch, bearer_token="bt")
+        with pytest.raises(ValueError, match="'page_id'"):
+            tools.create_inline_comment("", "body", "marker")
+
+    def test_empty_marker_ref_raises(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        _patch_globals(monkeypatch, bearer_token="bt")
+        with pytest.raises(ValueError, match="'inline_marker_ref'"):
+            tools.create_inline_comment("1", "body", "")
+
+
+# ---------------------------------------------------------------------------
+# Blogposts — full CRUD
+# ---------------------------------------------------------------------------
+
+
+class TestListBlogposts:
+    def test_no_filters(
+        self, monkeypatch: pytest.MonkeyPatch, httpx_mock: HTTPXMock
+    ) -> None:
+        _patch_globals(monkeypatch, bearer_token="bt")
+        httpx_mock.add_response(url=f"{V2}/blogposts", json=OK_JSON)
+        assert tools.list_blogposts() == OK_JSON
+
+    def test_with_all_filters(
+        self, monkeypatch: pytest.MonkeyPatch, httpx_mock: HTTPXMock
+    ) -> None:
+        _patch_globals(monkeypatch, bearer_token="bt")
+        httpx_mock.add_response(
+            url=f"{V2}/blogposts",
+            match_params={
+                "space-id": "S1",
+                "status": "current",
+                "sort": "-created-date",
+                "cursor": "c",
+                "limit": "10",
+            },
+            json=OK_JSON,
+        )
+        result = tools.list_blogposts(
+            space_id="S1",
+            status="current",
+            sort="-created-date",
+            cursor="c",
+            limit=10,
+        )
+        assert result == OK_JSON
+
+    def test_invalid_status_raises(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        _patch_globals(monkeypatch, bearer_token="bt")
+        with pytest.raises(ValueError, match="'status'"):
+            tools.list_blogposts(status="published")
+
+
+class TestGetBlogpost:
+    def test_minimal(
+        self, monkeypatch: pytest.MonkeyPatch, httpx_mock: HTTPXMock
+    ) -> None:
+        _patch_globals(monkeypatch, bearer_token="bt")
+        httpx_mock.add_response(url=f"{V2}/blogposts/B1", json=OK_JSON)
+        assert tools.get_blogpost("B1") == OK_JSON
+
+    def test_with_body_format_and_version(
+        self, monkeypatch: pytest.MonkeyPatch, httpx_mock: HTTPXMock
+    ) -> None:
+        _patch_globals(monkeypatch, bearer_token="bt")
+        httpx_mock.add_response(
+            url=f"{V2}/blogposts/B1",
+            match_params={"body-format": "storage", "version": "2"},
+            json=OK_JSON,
+        )
+        assert tools.get_blogpost("B1", body_format="storage", version=2) == OK_JSON
+
+    def test_empty_id_raises(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        _patch_globals(monkeypatch, bearer_token="bt")
+        with pytest.raises(ValueError, match="'blogpost_id'"):
+            tools.get_blogpost("")
+
+
+class TestCreateBlogpost:
+    def test_basic(
+        self, monkeypatch: pytest.MonkeyPatch, httpx_mock: HTTPXMock
+    ) -> None:
+        _patch_globals(monkeypatch, bearer_token="bt")
+        httpx_mock.add_response(
+            url=f"{V2}/blogposts",
+            method="POST",
+            match_json={
+                "spaceId": "S1",
+                "title": "Hello World",
+                "body": {"representation": "storage", "value": "<p>Hi</p>"},
+                "status": "current",
+            },
+            json=OK_JSON,
+        )
+        assert tools.create_blogpost("S1", "Hello World", "<p>Hi</p>") == OK_JSON
+
+    def test_draft_status(
+        self, monkeypatch: pytest.MonkeyPatch, httpx_mock: HTTPXMock
+    ) -> None:
+        _patch_globals(monkeypatch, bearer_token="bt")
+        httpx_mock.add_response(
+            url=f"{V2}/blogposts",
+            method="POST",
+            match_json={
+                "spaceId": "S1",
+                "title": "Draft Post",
+                "body": {"representation": "storage", "value": "<p>Draft</p>"},
+                "status": "draft",
+            },
+            json=OK_JSON,
+        )
+        assert (
+            tools.create_blogpost("S1", "Draft Post", "<p>Draft</p>", status="draft")
+            == OK_JSON
+        )
+
+    def test_empty_space_id_raises(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        _patch_globals(monkeypatch, bearer_token="bt")
+        with pytest.raises(ValueError, match="'space_id'"):
+            tools.create_blogpost("", "Title", "<p/>")
+
+    def test_invalid_status_raises(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        _patch_globals(monkeypatch, bearer_token="bt")
+        with pytest.raises(ValueError, match="'status'"):
+            tools.create_blogpost("S1", "T", "<p/>", status="published")
+
+
+class TestUpdateBlogpost:
+    def test_basic(
+        self, monkeypatch: pytest.MonkeyPatch, httpx_mock: HTTPXMock
+    ) -> None:
+        _patch_globals(monkeypatch, bearer_token="bt")
+        httpx_mock.add_response(
+            url=f"{V2}/blogposts/B1",
+            method="PUT",
+            match_json={
+                "id": "B1",
+                "title": "Updated Title",
+                "body": {"representation": "storage", "value": "<p>New</p>"},
+                "version": {"number": 3},
+                "status": "current",
+            },
+            json=OK_JSON,
+        )
+        assert tools.update_blogpost("B1", "Updated Title", "<p>New</p>", 3) == OK_JSON
+
+    def test_zero_version_raises(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        _patch_globals(monkeypatch, bearer_token="bt")
+        with pytest.raises(ValueError, match="'version_number'"):
+            tools.update_blogpost("B1", "T", "<p/>", 0)
+
+    def test_invalid_status_raises(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        _patch_globals(monkeypatch, bearer_token="bt")
+        with pytest.raises(ValueError, match="'status'"):
+            tools.update_blogpost("B1", "T", "<p/>", 2, status="archived")
+
+
+class TestDeleteBlogpost:
+    def test_basic(
+        self, monkeypatch: pytest.MonkeyPatch, httpx_mock: HTTPXMock
+    ) -> None:
+        _patch_globals(monkeypatch, bearer_token="bt")
+        httpx_mock.add_response(
+            url=f"{V2}/blogposts/B1",
+            method="DELETE",
+            status_code=204,
+            content=b"",
+        )
+        result = tools.delete_blogpost("B1")
+        assert result["status"] == 204
+
+    def test_purge(
+        self, monkeypatch: pytest.MonkeyPatch, httpx_mock: HTTPXMock
+    ) -> None:
+        _patch_globals(monkeypatch, bearer_token="bt")
+        httpx_mock.add_response(
+            url=f"{V2}/blogposts/B1",
+            method="DELETE",
+            match_params={"purge": "true"},
+            status_code=204,
+            content=b"",
+        )
+        result = tools.delete_blogpost("B1", purge=True)
+        assert result["status"] == 204
+
+    def test_empty_id_raises(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        _patch_globals(monkeypatch, bearer_token="bt")
+        with pytest.raises(ValueError, match="'blogpost_id'"):
+            tools.delete_blogpost("")
+
+
+# ---------------------------------------------------------------------------
+# Bulk user lookup
+# ---------------------------------------------------------------------------
+
+
+class TestBulkUserLookup:
+    def test_basic(
+        self, monkeypatch: pytest.MonkeyPatch, httpx_mock: HTTPXMock
+    ) -> None:
+        _patch_globals(monkeypatch, bearer_token="bt")
+        httpx_mock.add_response(
+            url=f"{V2}/users-bulk",
+            method="POST",
+            match_json={"accountIds": ["U1", "U2", "U3"]},
+            json=OK_JSON,
+        )
+        assert tools.bulk_user_lookup(["U1", "U2", "U3"]) == OK_JSON
+
+    def test_empty_list_raises(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        _patch_globals(monkeypatch, bearer_token="bt")
+        with pytest.raises(ValueError, match="'account_ids'"):
+            tools.bulk_user_lookup([])
